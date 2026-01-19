@@ -44,8 +44,8 @@ class frequency_grid:
         # Шаг сетки
         dx = L / N
         # Генерируем массив пространственных частот дискретного преобразования Фурье
-        nu_x = np.fft.fftfreq(N, dx)
-        nu_y = np.fft.fftfreq(N, dx)
+        nu_x = np.fft.fftshift(np.fft.fftfreq(N, dx))
+        nu_y = np.fft.fftshift(np.fft.fftfreq(N, dx))
         # Формируем двумерную сетку пространственных частот
         Nu_x, Nu_y = np.meshgrid(nu_x, nu_y)
         self.nu_x = Nu_x
@@ -60,7 +60,7 @@ def laguerre_gaussian_beam(polar_grid, beam):
     A_lm = np.sqrt(2*factorial(beam.m)/(np.pi*factorial(beam.l+beam.m)))
     # Комплексная амплитуда пучка Лагерра-Гаусса (z=0)
     E_lg = A_lm * (polar_grid.r/beam.W_0)**beam.l * L_poly * np.exp(-1j*beam.l*polar_grid.phi -
-                                                            polar_grid.r**2/W_0**2) 
+                                                            polar_grid.r**2/beam.W_0**2) 
     # Возвращаем массив комплексных чисел, соответствующих комплексной амплитуде пучка в 
     # точках координатной сетки
     return E_lg
@@ -74,15 +74,15 @@ def one_layer_propagation(freq_grid, E, d, wavelength):
     phase = aotools.turbulence.phasescreen.ft_phase_screen(r_0, N, dx, L0, l0)
     S = np.exp(1j * phase)
     # Шаг 1
-    F = np.fft.fft2(E)
+    F = np.fft.fftshift(np.fft.fft2(E))
     F1 = F * H
-    E1 = np.fft.ifft2(F1)
+    E1 = np.fft.fftshift(np.fft.ifft2(F1))
     # Шаг 2
     E2 = E1 * S
     # Шаг 3
-    F2 = np.fft.fft2(E2)
+    F2 = np.fft.fftshift(np.fft.fft2(E2))
     F3 = F2 * H
-    E3 = np.fft.ifft2(F3)
+    E3 = np.fft.fftshift(np.fft.ifft2(F3))
     return E3
 
 def propagation(freq_grid, E, d, wavelength, Ltr):
@@ -102,6 +102,17 @@ def phase_visualization(L, E):
     plt.ylabel('y, мм')
     plt.show()
 
+def amplitiude_visualization(L, E):
+    #Визуализируем амплитуду, поэтому создаем массив модулей комплексных амплитуд
+    phase = np.abs(E)
+    plt.figure(figsize=(10, 4))
+    plt.subplot(1, 2, 1)
+    plt.imshow(phase, cmap='gray', extent=[-L/2*1e3, L/2*1e3, -L/2*1e3, L/2*1e3])
+    plt.colorbar(label='Амплитуда ()')
+    plt.xlabel('x, мм')
+    plt.ylabel('y, мм')
+    plt.show()
+
 # Параметры пучка
 N = 512  
 L = 0.02
@@ -114,7 +125,7 @@ d = 100
 # Длина трассы
 Ltr = 1000
 W_0 = 5e-3
-m, l = 1, 1
+m, l = 0, 1
 p_grid = polar_grid(N, L)
 # Создание сетки пространственных частот
 f_grid = frequency_grid(N, L)
@@ -131,7 +142,9 @@ beam = LG_beam(N, L, 0, wavelength, W_0, m, l)
 E_before = laguerre_gaussian_beam(p_grid, beam)
 
 E_after = propagation(f_grid, E_before, d, wavelength, Ltr)
-# Выводим тепловую карту фазового профиля пучка до распространения в атмосфере
+# Выводим тепловые карты фазового и амплитудного профиля пучка до распространения в атмосфере
 phase_visualization(L, E_before)
-# Выводим тепловую карту фазового профиля пучка после распространения в атмосфере
+amplitiude_visualization(L, E_before)
+# Выводим тепловые карты фазового и амплитудного профиля пучка после распространения в атмосфере
 phase_visualization(L, E_after)
+amplitiude_visualization(L, E_after)
