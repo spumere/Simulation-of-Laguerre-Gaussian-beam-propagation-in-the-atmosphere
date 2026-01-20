@@ -80,21 +80,25 @@ def laguerre_gaussian_beam(polar_grid, beam):
 def one_layer_propagation(freq_grid, E, d, wavelength, turbulence_1):
     k = 2*np.pi/wavelength
     # Передаточная функция свободного пространства
-    H = np.exp(-1j*2*np.pi*d*np.sqrt(wavelength**(-2) - freq_grid.nu_x**2 - freq_grid.nu_y**2))
+    H = np.exp(-1j*2*np.pi*d*np.sqrt(wavelength**(-2) 
+                                                      - freq_grid.nu_x**2 - freq_grid.nu_y**2))
     # Формирование фазового экрана
     phase = aotools.turbulence.phasescreen.ft_phase_screen(turbulence_1.r_0, turbulence_1.N, 
                                                            turbulence_1.dx, turbulence_1.L_0, 
                                                            turbulence_1.l_0)
     S = np.exp(1j * phase)
+
     # Шаг 1
-    F = np.fft.fftshift(np.fft.fft2(E))
-    F1 = F * H
+    F = np.fft.fft2(np.fft.ifftshift(E))
+    F1 = F * np.fft.ifftshift(H) 
     E1 = np.fft.fftshift(np.fft.ifft2(F1))
+    
     # Шаг 2
     E2 = E1 * S
+    
     # Шаг 3
-    F2 = np.fft.fftshift(np.fft.fft2(E2))
-    F3 = F2 * H
+    F2 = np.fft.fft2(np.fft.ifftshift(E2))
+    F3 = F2 * np.fft.ifftshift(H)
     E3 = np.fft.fftshift(np.fft.ifft2(F3))
     return E3
 
