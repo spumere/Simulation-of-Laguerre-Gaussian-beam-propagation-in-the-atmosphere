@@ -51,6 +51,17 @@ class frequency_grid:
         self.nu_x = Nu_x
         self.nu_y = Nu_y
 
+class turbulence:
+    # Класс, который будет хранить параметры турбулентности, необходимые для моделирования
+    # фазового экрана
+    def __init__(self, N, L, r_0, L_0, l_0):
+        self.N = N
+        self.L = L
+        self.dx = L / N
+        self.r_0 = r_0
+        self.L_0 = L_0
+        self.l_0 = l_0
+
 def laguerre_gaussian_beam(polar_grid, beam):
     # Аргумент многочлена Лагерра
     rho_w = 2 * (polar_grid.r**2) / (beam.W_0**2)
@@ -66,12 +77,14 @@ def laguerre_gaussian_beam(polar_grid, beam):
     return E_lg
 
 
-def one_layer_propagation(freq_grid, E, d, wavelength):
+def one_layer_propagation(freq_grid, E, d, wavelength, turbulence_1):
     k = 2*np.pi/wavelength
     # Передаточная функция свободного пространства
     H = np.exp(-1j*2*np.pi*d*np.sqrt(wavelength**(-2) - freq_grid.nu_x**2 - freq_grid.nu_y**2))
     # Формирование фазового экрана
-    phase = aotools.turbulence.phasescreen.ft_phase_screen(r_0, N, dx, L0, l0)
+    phase = aotools.turbulence.phasescreen.ft_phase_screen(turbulence_1.r_0, turbulence_1.N, 
+                                                           turbulence_1.dx, turbulence_1.L_0, 
+                                                           turbulence_1.l_0)
     S = np.exp(1j * phase)
     # Шаг 1
     F = np.fft.fftshift(np.fft.fft2(E))
@@ -85,10 +98,10 @@ def one_layer_propagation(freq_grid, E, d, wavelength):
     E3 = np.fft.fftshift(np.fft.ifft2(F3))
     return E3
 
-def propagation(freq_grid, E, d, wavelength, Ltr):
+def propagation(freq_grid, E, d, wavelength, Ltr, turbulence_1):
     Nlayers = int(Ltr/d)
     for i in tqdm(range(Nlayers), desc="Моделирование слоев"):
-        E = one_layer_propagation(freq_grid, E, d, wavelength)
+        E = one_layer_propagation(freq_grid, E, d, wavelength, turbulence_1)
     return E
 
 def phase_visualization(L, E):
@@ -102,22 +115,9 @@ def phase_visualization(L, E):
     plt.ylabel('y, мм')
     plt.show()
 
-def amplitiude_visualization(L, E):
-    #Визуализируем амплитуду, поэтому создаем массив модулей комплексных амплитуд
-    phase = np.abs(E)
-    plt.figure(figsize=(10, 4))
-    plt.subplot(1, 2, 1)
-    plt.imshow(phase, cmap='gray', extent=[-L/2*1e3, L/2*1e3, -L/2*1e3, L/2*1e3])
-    plt.colorbar(label='Амплитуда ()')
-    plt.xlabel('x, мм')
-    plt.ylabel('y, мм')
-    plt.show()
-
 # Параметры пучка
 N = 512  
 L = 0.02
-# Шаг сетки
-dx = L / N
 # Длина волны пучка
 wavelength = 1550e-9 
 # Длина свободного пространства - элементарных слоев 1 и 3
@@ -133,18 +133,18 @@ f_grid = frequency_grid(N, L)
 # Параметр Фрида
 r_0 = 0.02
 # Внешний масштаб турбулентности
-L0 = 100
+L_0 = 100
 # Внутренний масштаб турбулентности
-l0 = 0.001
+l_0 = 0.001
+
+turbulence_1 = turbulence(N, L, r_0, L_0, l_0)
 
 beam = LG_beam(N, L, 0, wavelength, W_0, m, l)
 
 E_before = laguerre_gaussian_beam(p_grid, beam)
 
-E_after = propagation(f_grid, E_before, d, wavelength, Ltr)
-# Выводим тепловые карты фазового и амплитудного профиля пучка до распространения в атмосфере
+E_after = propagation(f_grid, E_before, d, wavelength, Ltr, turbulence_1)
+# Выводим тепловую карту фазового профиля пучка до распространения в атмосфере
 phase_visualization(L, E_before)
-amplitiude_visualization(L, E_before)
-# Выводим тепловые карты фазового и амплитудного профиля пучка после распространения в атмосфере
+# Выводим тепловую карту фазового профиля пучка после распространения в атмосфере
 phase_visualization(L, E_after)
-amplitiude_visualization(L, E_after)
