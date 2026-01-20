@@ -115,6 +115,17 @@ def phase_visualization(L, E):
     plt.ylabel('y, мм')
     plt.show()
 
+def amplitiude_visualization(L, E):
+    #Визуализируем амплитуду, поэтому создаем массив модулей комплексных амплитуд
+    phase = np.abs(E)
+    plt.figure(figsize=(10, 4))
+    plt.subplot(1, 2, 1)
+    plt.imshow(phase, cmap='gray', extent=[-L/2*1e3, L/2*1e3, -L/2*1e3, L/2*1e3])
+    plt.xlabel('x, мм')
+    plt.ylabel('y, мм')
+    plt.show()
+
+
 # Параметры пучка
 N = 512  
 L = 0.02
@@ -144,7 +155,9 @@ beam = LG_beam(N, L, 0, wavelength, W_0, m, l)
 E_before = laguerre_gaussian_beam(p_grid, beam)
 
 E_after = propagation(f_grid, E_before, d, wavelength, Ltr, turbulence_1)
-# Выводим тепловую карту фазового профиля пучка до распространения в атмосфере
+# Выводим тепловые карты фазового и амплитудного профиля пучка до распространения в атмосфере
 phase_visualization(L, E_before)
-# Выводим тепловую карту фазового профиля пучка после распространения в атмосфере
+amplitiude_visualization(L, E_before)
+# Выводим тепловые карты фазового и амплитудного профиля пучка после распространения в атмосфере
 phase_visualization(L, E_after)
+amplitiude_visualization(L, E_after)
