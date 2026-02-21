@@ -6,9 +6,10 @@ from tqdm import tqdm
 import aotools
 import sys
 
+
 class LG_beam:
     # Класс, который будет хранить характеристики пучка Лагерра-Гаусса
-    def __init__(self, N, L, z, wavelength, w_0, m, l, A):
+    def __init__(self, N, L, z, wavelength, w_0, n, m, A):
         # Размер двумерного массива, задающего пучок
         self.N = N
         # Размер области, приближаемой массивом точек
@@ -20,9 +21,9 @@ class LG_beam:
         # Радиус перетяжки
         self.W_0 = w_0
         # Радиальный индекс
-        self.m = m
+        self.n = n
         # Абсолютное значение топологического заряда
-        self.l = l
+        self.m = m
         # Массив комплексных амплитуд пучка
         self.A = A
 
@@ -70,28 +71,18 @@ class turbulence:
         # Длина трассы
         self.Ltr = Ltr
 
-
-def laguerre_gaussian_beam(polar_grid, beam, normalize_to_source = None):
+def laguerre_gaussian_beam(polar_grid, beam):
     # Аргумент многочлена Лагерра
     rho_w = 2 * (polar_grid.r**2) / (beam.W_0**2)
-    # Модуль топологического заряда
-    l = np.abs(beam.l)
     # Многочлен Лагерра L_m^l
-    L_poly = eval_genlaguerre(beam.m, abs(beam.l), rho_w)
+    L = eval_genlaguerre(beam.n, abs(beam.m), rho_w)
     # Нормировочная константа
-    A_lm = np.sqrt(2*factorial(beam.m)/(np.pi*factorial(l+beam.m)))
+    A_lm = np.sqrt(2*factorial(beam.n)/(np.pi*factorial(beam.n+beam.m)))
     # Комплексная амплитуда пучка Лагерра-Гаусса (z=0)
-    E_lg = A_lm * (polar_grid.r/beam.W_0)**l * L_poly * np.exp(-1j*beam.l*polar_grid.phi -
-                                                            polar_grid.r**2/beam.W_0**2) 
+    E_lg = 1/beam.W_0 * A_lm * (np.sqrt(2)*polar_grid.r/beam.W_0)**beam.m * L *np.exp(
+        1j*beam.m*polar_grid.phi - polar_grid.r**2/beam.W_0**2) 
     # Возвращаем массив комплексных чисел, соответствующих комплексной амплитуде пучка в 
     # точках координатной сетки
-    if normalize_to_source is not None:
-        # Нормализуем целевой пучок к энергии источника
-        energy_source = np.sum(np.abs(normalize_to_source)**2)
-        energy_target = np.sum(np.abs(E_lg)**2)
-        factor = np.sqrt(energy_source / energy_target)
-        E_lg = E_lg * factor
-
     return E_lg
 
 def ASM(A, DOE, wavelength, z, inverse=False):
@@ -121,7 +112,8 @@ def ASM(A, DOE, wavelength, z, inverse=False):
     return np.fft.ifft2(np.fft.fft2(A) * H)
 
 def create_areas(N, L_size, R1, R2):
-    # Функция для создания областей L1 и L2 в фокальной плоскости
+    # Функция для создания полезной L1 и дополнительной L\L1 = L2
+    # областей в фокальной плоскости
     x = np.linspace(-L_size/2, L_size/2, N, endpoint=False)
     y = np.linspace(-L_size/2, L_size/2, N, endpoint=False)
     X, Y = np.meshgrid(x, y, indexing='ij')
@@ -130,8 +122,8 @@ def create_areas(N, L_size, R1, R2):
     L2 = r <= R2
     return L1, L2
 
-def P1(source, current, DOE, L2, C):
-    result = ASM(C*np.abs(source.A)*np.exp(1j*np.angle(current)), DOE, 
+def P1(source, current, DOE, L2):
+    result = ASM(np.abs(source.A)*np.exp(1j*np.angle(current)), DOE, 
                                source.wavelength, DOE.f)
     result[~L2] = 0
     return result
@@ -145,14 +137,6 @@ def P2(target, current, L1, L2):
     result[L1_setminus_L2] = current[L1_setminus_L2]
     # Вне L': уже 0
     return result
-
-def calculate_C(current, source, mask):
-    # Энергия прошедшего пучка W в области D  
-    energy_W_in_D = np.sum(np.abs(current[mask])**2)
-    # Энергия падающего пучка A в области D  
-    energy_A_in_D = np.sum(np.abs(source[mask])**2)
-    C = np.sqrt(energy_W_in_D / energy_A_in_D)
-    return C
 
 def AAM(source, target, DOE, L1, L2, precision):
 
@@ -172,21 +156,20 @@ def AAM(source, target, DOE, L1, L2, precision):
     alpha2 = 1
 
     for i in tqdm(range(sys.maxsize), desc="Итерации алгоритма"):
-        # Шаг 1: применяем Т_2 в плоскости изображения
+        # Шаг 1: применяем Т2 в плоскости изображения
         w_n = w.copy()
         P2w = P2(target.A, w, L1, L2)
         T2w = w + alpha2 * (P2w - w)
-        d1 = np.sqrt(np.sum(np.abs(w - w_n)**2))
+        d1 = np.sqrt(np.sum(np.abs(P2w - w_n)**2))
 
         # Шаг 2: обратное преобразование Френеля
         W = ASM(T2w, DOE, source.wavelength, DOE.f, inverse = True)
 
         # Шаг 3: применяем Т1 в плоскости ДОЭ
         w_n = w.copy()
-        C = calculate_C(W, source.A, DOE.mask)
-        P1w = P1(source, W, DOE, L2, C)
+        P1w = P1(source, W, DOE, L2)
         w = T2w + alpha1 * (P1w  - T2w)
-        d2 = np.sqrt(np.sum(np.abs(w - w_n)**2))
+        d2 = np.sqrt(np.sum(np.abs(P1w - w_n)**2))
         # Шаг 4: анализируем ошибку
         error = d1 + d2
         errors.append(error)
@@ -199,21 +182,15 @@ def AAM(source, target, DOE, L1, L2, precision):
                                               inverse = True)/source.A))
     return T
 
-def DOE_propagation(source, DOE):
+def DOE_propagation(source, DOE, L1):
     # Функция для моделирования распространения пучка источника на фокусное расстояние
     # после прохождения ДОЭ
-    return ASM(source.A * np.exp(1j * np.angle(DOE.T)), DOE,
-                             source.wavelength, DOE.f)
-
-def energy_efficiency(result, source, L1):
-    numerator = np.sum(np.abs(result[L1])**2)
-    denominator = np.sum(np.abs(source)**2)
-    print("Энергетическая эффективность: ", numerator/denominator * 100, "%")
+    return mask(ASM(source.A * np.exp(1j * np.angle(DOE.T)), DOE,
+                             source.wavelength, DOE.f), L1)
     
 def correlation(result, target, L1):
-    corr_L1 = np.abs(np.sum(result[L1] * np.conj(target[L1])))**2 / (
+    return np.abs(np.sum(result[L1] * np.conj(target[L1])))**2 / (
     np.sum(np.abs(result[L1])**2) * np.sum(np.abs(target[L1])**2))
-    print(f"Содержание заданной моды в L1: {corr_L1}")
 
 def mask(field, L1):
     # Создание маски для визуализации
@@ -221,11 +198,17 @@ def mask(field, L1):
     masked[L1] = field[L1]
     return masked
 
-def one_layer_propagation(w, DOE, turbulence_1, wavelength):
+def make_turbulence(N, turbulence):
+    phase_tensor = np.empty((N, turbulence.N, turbulence.N), dtype=np.float32)
+    for i in range(N):
+        phase = aotools.turbulence.phasescreen.ft_phase_screen(turbulence.r_0, turbulence.N, 
+                                                           turbulence.dx, turbulence.L_0, 
+                                                           turbulence.l_0)
+        phase_tensor[i] = phase
+    return phase_tensor
+
+def one_layer_propagation(w, DOE, turbulence_1, wavelength, phase):
     # Формирование фазового экрана
-    phase = aotools.turbulence.phasescreen.ft_phase_screen(turbulence_1.r_0, turbulence_1.N, 
-                                                           turbulence_1.dx, turbulence_1.L_0, 
-                                                           turbulence_1.l_0)
     S = np.exp(1j * phase)
     step = turbulence_1.d/2
     # Шаг 1
@@ -236,36 +219,112 @@ def one_layer_propagation(w, DOE, turbulence_1, wavelength):
     w = ASM(W, DOE, wavelength, step)
     return w
 
-def propagation(E, DOE, turbulence_1, wavelength):
+def propagation(E, DOE, turbulence_1, wavelength, phase_tensor):
     Nlayers = int(turbulence_1.Ltr/turbulence_1.d)
     for i in tqdm(range(Nlayers), desc="Моделирование слоев"):
-        E = one_layer_propagation(E, DOE, turbulence_1, wavelength)
+        E = one_layer_propagation(E, DOE, turbulence_1, wavelength, phase_tensor[i])
     return E
 
-def plot_propagation(L, result_before, result_after):
-    fig, ax = plt.subplots(2, 2, figsize=(4, 4))
+def plot_propagation(L, all_before, all_after_1, all_after_2, save_svg=False, filename='all_modes.svg'):
+    fig = plt.figure(figsize=(10, 8))
+    
     extent_val = [-L/2*1e3, L/2*1e3, -L/2*1e3, L/2*1e3]
-    phase_before = np.angle(result_before)
-    im1 = ax[0, 0].imshow(phase_before, cmap='gray', aspect='equal', 
-                          extent=extent_val)
-    ax[0, 0].axis('off')
-    amp_before = np.abs(result_before)
-    im2 = ax[0, 1].imshow(amp_before, cmap='gray', aspect='equal', 
-                          extent=extent_val)
-    ax[0, 1].axis('off')
-    phase_after = np.angle(result_after)
-    im3 = ax[1, 0].imshow(phase_after, cmap='gray', aspect='equal', 
-                          extent=extent_val)
-    ax[1, 0].axis('off')
-    amp_after = np.abs(result_after)
-    im4 = ax[1, 1].imshow(amp_after, cmap='gray', aspect='equal', 
-                          extent=extent_val)
-    ax[1, 1].axis('off')
-    plt.subplots_adjust(left=0.05, right=0.95, bottom=0.05, top=0.95, 
-                       wspace=0.05, hspace=0.05)
+    mode_names = ['Гауссов пучок', 'ГЛ (0,1)', 'ГЛ (0,2)', 'ГЛ (0,3)', 'ГЛ (0,4)', 'ГЛ (0,5)']
+    
+    n_rows, n_cols = 6, 6
+    
+    left_margin = 0.10   
+    right_margin = 0.04 
+    bottom_margin = 0.06 
+    top_margin = 0.08  
+    
+    grid_width = 1.0 - left_margin - right_margin
+    grid_height = 1.0 - bottom_margin - top_margin
+    
+    frame_width = grid_width / n_cols
+    frame_height = grid_height / n_rows
+    
+    grid_start_x = left_margin
+    grid_start_y = bottom_margin
+    
+    im_for_cbar = {}
+
+    for row in range(n_rows):
+        for col in range(n_cols):
+
+            x0 = grid_start_x + col * frame_width
+            y0 = grid_start_y + row * frame_height
+            
+            ax = fig.add_axes([x0, y0, frame_width, frame_height])
+            
+            if row == 5:
+                phase = np.angle(all_before[col])
+                im = ax.imshow(phase, cmap='gray', aspect='equal',
+                              extent=extent_val, vmin=-np.pi, vmax=np.pi)
+                if col == n_cols - 1:
+                    im_for_cbar['phase_before'] = (im, x0 + frame_width, y0)
+            
+            elif row == 4:
+                amp = np.abs(all_before[col])
+                ax.imshow(amp, cmap='gray_r', aspect='equal', extent=extent_val)
+            
+            elif row == 3:
+                phase = np.angle(all_after_1[col])
+                im = ax.imshow(phase, cmap='gray', aspect='equal',
+                              extent=extent_val, vmin=-np.pi, vmax=np.pi)
+                if col == n_cols - 1:
+                    im_for_cbar['phase_r1'] = (im, x0 + frame_width, y0)
+            
+            elif row == 2:  
+                amp = np.abs(all_after_1[col])
+                ax.imshow(amp, cmap='gray_r', aspect='equal', extent=extent_val)
+            
+            elif row == 1: 
+                phase = np.angle(all_after_2[col])
+                im = ax.imshow(phase, cmap='gray', aspect='equal',
+                              extent=extent_val, vmin=-np.pi, vmax=np.pi)
+                if col == n_cols - 1:
+                    im_for_cbar['phase_r2'] = (im, x0 + frame_width, y0)
+            
+            elif row == 0: 
+                amp = np.abs(all_after_2[col])
+                ax.imshow(amp, cmap='gray_r', aspect='equal', extent=extent_val)
+            
+            ax.axis('off')
+    
+
+    for key, (im, x_pos, y_pos) in im_for_cbar.items():
+        cbar_width = 0.01  
+        cbar_x = x_pos + 0.005  
+        cbar_ax = fig.add_axes([cbar_x, y_pos, cbar_width, frame_height])
+        cbar = fig.colorbar(im, cax=cbar_ax)
+        cbar.set_ticks([-np.pi + 0.2, 0, np.pi - 0.2])
+        cbar.set_ticklabels(['-π', '0', 'π'])
+        cbar.ax.tick_params(labelsize=6) 
+    
+    row_labels = ['Ампл. \n(r0=0.02)', 'Фаза \n(r0=0.02)',
+                  'Ампл. \n(r0=0.01)', 'Фаза \n(r0=0.01)',
+                  'Ампл. до', 'Фаза до']
+    
+    for row in range(n_rows):
+        text_x = left_margin - 0.008  
+        text_y = grid_start_y + row * frame_height + frame_height/2
+        fig.text(text_x, text_y, row_labels[row], 
+                fontsize=10, va='center', ha='right', 
+                linespacing=1.2)  
+    
+    for col in range(n_cols):
+        text_x = grid_start_x + col * frame_width + frame_width/2
+        text_y = grid_start_y + n_rows * frame_height + 0.005 
+        fig.text(text_x, text_y, mode_names[col], 
+                fontsize=10, va='bottom', ha='center')  
+    
+    if save_svg:
+        plt.savefig(filename, format='svg', dpi=300, bbox_inches='tight', pad_inches=0)
+        print(f"График сохранен как {filename}")
     
     plt.show()
-
+    
 # Общие параметры
 # Число отсчетов
 N = 1024
@@ -279,13 +338,14 @@ p_grid = polar_grid(N, L)
 
 # Параметры источника и создание массива, задающего пучок
 source = LG_beam(N, L, 0, wavelength, W_0, 0, 0, 0)
-source.A = laguerre_gaussian_beam(p_grid, source)
-
+source.A = laguerre_gaussian_beam(p_grid, source) / np.sqrt(np.sum(np.abs(
+    laguerre_gaussian_beam(p_grid, source))**2))
 # Параметры целевого пучка и создание массива, задающего пучок
 # Абсолютное значение топологического заряда и радиальный индекс
-l, m = 1, 0
-target = LG_beam(N, L, 0, wavelength, W_0, m, l, 0)
-target.A = laguerre_gaussian_beam(p_grid, target, source.A)
+m, n = 1, 0
+target = LG_beam(N, L, 0, wavelength, W_0, n, m, 0)
+target.A = laguerre_gaussian_beam(p_grid, target) / np.sqrt(np.sum(np.abs(
+    laguerre_gaussian_beam(p_grid, target))**2))
 
 # Параметры ДОЭ и создание экземпляра класса, задающего ДОЭ
 f = 0.05
@@ -293,38 +353,81 @@ phase_plate = DOE(N, L, f, 0)
 
 # Параметры алгоритма и создание областей
 # Допустимая ошибка суммарного расстояния
-precision = 5e-4
+precision = 1e-4
 # Радиусы основной и дополнительной областей
 R1 = 0.0015
 R2 = 0.0022
 L1, L2 = create_areas(N, L, R1, R2)
-
 # Параметры турбулентности
+# Расстояние между фазовыми экранами
 d = 100
+# Длина трека
 Ltr = 1000
-r_0 = 0.02
-L_0 = 100
+# Параметр Фрида
+r_0_1 = 0.01
+r_0_2 = 0.02
+# Внешний и внутренний масштабы турбулентности
+L_0 = 20
 l_0 = 0.001
 # Создание экземпляра класса, содержащего параметры турбулентности
-turbulence_1 = turbulence(N, L, r_0, L_0, l_0, d, Ltr)
+turbulence_1 = turbulence(N, L, r_0_1, L_0, l_0, d, Ltr)
+turbulence_2 = turbulence(N, L, r_0_2, L_0, l_0, d, Ltr)
 
-# Рассчитываем ДОЭ и результат его применения к исходному пучку
-phase_plate.T = AAM(source, target, phase_plate, L1, L2, precision)
-result = DOE_propagation(source, phase_plate)
+# Создание трехмерных массивов, содержащих все фазовые экраны для трека
+phase_tensor_1 = make_turbulence(int(Ltr/d), turbulence_1)
+phase_tensor_2 = make_turbulence(int(Ltr/d), turbulence_2)
+# Список для хранения массивов пучков до прохождения через трек
+all_results_before = []
+# Список для хранения массивов пучков, прошедших через трек с r0 = 1 см
+all_results_after_1 = []
+# Список для хранения массивов пучков, прошедших через трек с r0 = 2 см
+all_results_after_2 = []
 
-# Рассчитываем характеристики качества полученной моды
-correlation(result, target.A, L1)
-energy_efficiency(result, source.A, L1)
+print("Гаусс")
+result_after_turbulence_1 = propagation(source.A, phase_plate, turbulence_1, 
+                                        wavelength, phase_tensor_1)
+result_after_turbulence_2 = propagation(source.A, phase_plate, turbulence_2, 
+                                        wavelength, phase_tensor_2)
+all_results_before.append(source.A)
+all_results_after_1.append(mask(result_after_turbulence_1, L1))
+all_results_after_2.append(mask(result_after_turbulence_2, L1))
+print(correlation(result_after_turbulence_1, source.A, L1))
+correlation(result_after_turbulence_2, source.A, L1)
+np.save('turbulence_1.npy', phase_tensor_1)
+# Создаем массивы для всех мод
+modes = [(0, 0), (1, 0), (2, 0), (3, 0), (4, 0), (5, 0)]
 
-result_after_turbulence = propagation(result, phase_plate, turbulence_1, wavelength)
-# Выводим тепловые карты фазового и амплитудного профиля полученного пучка до и после 
-# распространения в атмосфере
-plot_propagation(L, result, result_after_turbulence)
+for i, (m, n) in enumerate(modes):
+    if m == 0 and n == 0:
+        # Гауссов пучок уже обработан
+        continue
+    
+    print(f"ГЛ{m:02d}")
+    target = LG_beam(N, L, 0, wavelength, W_0, n, m, 0)
+    target.A = laguerre_gaussian_beam(p_grid, target) / np.sqrt(np.sum(np.abs(
+        laguerre_gaussian_beam(p_grid, target))**2))
+    
+    phase_plate.T = AAM(source, target, phase_plate, L1, L2, precision)
+    result = DOE_propagation(source, phase_plate, L1)
+    correlation(result, target.A, L1)
+    result_after_turbulence_1 = propagation(result, phase_plate, turbulence_1, wavelength, 
+                                            phase_tensor_1)
+    result_after_turbulence_2 = propagation(result, phase_plate, turbulence_2, wavelength,
+                                            phase_tensor_2)
+    correlation(result_after_turbulence_1, target.A, L1)
+    correlation(result_after_turbulence_2, target.A, L1)
+    all_results_before.append(result)
+    all_results_after_1.append(mask(result_after_turbulence_1, L1))
+    all_results_after_2.append(mask(result_after_turbulence_2, L1))
 
-# Рассчитываем характеристики качества распространенной моды
-correlation(result_after_turbulence, target.A, L1)
-energy_efficiency(result_after_turbulence, result, L1)
+# Теперь преобразуем списки в 3D массивы
+results_before_3d = np.stack(all_results_before)
+results_after_1_3d = np.stack(all_results_after_1)
+results_after_2_3d = np.stack(all_results_after_2)
 
-print(np.sqrt(np.sum(np.abs(source.A
-     - ASM(ASM(source.A, phase_plate, wavelength, 10), phase_plate, wavelength, 10, inverse=True)
-)**2)))
+# И отображаем все сразу
+plot_propagation(L, results_before_3d, results_after_1_3d, results_after_2_3d,
+                 save_svg=True, filename='all_modes.svg')
+
+# Загружаем
+# phase_tensor_1 = np.load('turbulence.npy')
