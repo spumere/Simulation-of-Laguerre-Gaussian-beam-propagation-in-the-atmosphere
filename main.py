@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.special import eval_genlaguerre
+import scipy as sp
+from scipy.special import genlaguerre
 from math import factorial
 from tqdm import tqdm
 import aotools
@@ -9,8 +10,8 @@ import sys
 
 class LG_beam:
     # Класс, который будет хранить характеристики пучка Лагерра-Гаусса
-    def __init__(self, N, L, z, wavelength, w_0, n, m, A):
-        # Размер двумерного массива, задающего пучок
+    def __init__(self, N, L, z, wavelength, sigma_0, n, m, A):
+        # Размер двумерного массива отсчетов поперечного амплитудно-фазового распределения пучка
         self.N = N
         # Размер области, приближаемой массивом точек
         self.L = L
@@ -19,7 +20,7 @@ class LG_beam:
         # Длина волны пучка
         self.wavelength = wavelength
         # Радиус перетяжки
-        self.W_0 = w_0
+        self.sigma_0 = sigma_0
         # Радиальный индекс
         self.n = n
         # Абсолютное значение топологического заряда
@@ -50,8 +51,6 @@ class DOE:
         self.L = L
         # Функция комплексного пропускания ДОЭ
         self.T = T
-        # Маска ДОЭ, необходимая для вычисления коэффициента C в алгоритме
-        self.mask = np.ones((N, N), dtype=bool)
 
 class turbulence:
     # Класс, который будет хранить параметры турбулентности, необходимые для моделирования
@@ -59,6 +58,7 @@ class turbulence:
     def __init__(self, N, L, r_0, L_0, l_0, d, Ltr):
         self.N = N
         self.L = L
+        
         self.dx = L / N
         # Параметр Фрида
         self.r_0 = r_0
@@ -75,7 +75,8 @@ def laguerre_gaussian_beam(polar_grid, beam):
     # Аргумент многочлена Лагерра
     rho_w = 2 * (polar_grid.r**2) / (beam.W_0**2)
     # Многочлен Лагерра L_m^l
-    L = eval_genlaguerre(beam.n, abs(beam.m), rho_w)
+    laguerre_polynomial = genlaguerre(beam.n, abs(beam.m))
+    L = laguerre_polynomial(rho_w)
     # Нормировочная константа
     A_lm = np.sqrt(2*factorial(beam.n)/(np.pi*factorial(beam.n+beam.m)))
     # Комплексная амплитуда пучка Лагерра-Гаусса (z=0)
@@ -110,6 +111,39 @@ def ASM(A, DOE, wavelength, z, inverse=False):
         H[evanescent_mask] = 0
     
     return np.fft.ifft2(np.fft.fft2(A) * H)
+
+def power_fraction(T, n, m, sigma0=1.0):
+    # Возвращает долю мощности F(T) для LG_{n}^{m} пучка.
+    # T = 2*R1^2 / sigma0^2
+
+    # полином Лагерра
+    L = genlaguerre(n, abs(m))
+    
+    def integrand(t):
+        return (t**abs(m)) * (L(t)**2) * np.exp(-t)
+    
+    # Интеграл от 0 до T
+    integral, _ = sp.integrate.quad(integrand, 0, T, limit=200)
+    
+    # Полная мощность (интеграл от 0 до ∞)
+    total = factorial(n + abs(m)) / factorial(n)
+    
+    return integral / total
+
+def find_radius(n, m, sigma0, delta=0.99, tol=1e-10):
+    ## Находит радиус полезной области R1 для пучка Гаусса-Лагерра
+    # Поиск верхней границы
+    T_high = 10 + 2*abs(m) + 4*n
+    while power_fraction(T_high, n, m) < delta:
+        T_high *= 2
+    
+    # Решаем F(T) - delta = 0 методом половинного деления
+    T_solution = sp.optimize.bisect(lambda T: power_fraction(T, n, m) - delta, 
+                        0, T_high, xtol=tol)
+    
+    # Переход к физическому радиусу
+    R1 = sigma0 * np.sqrt(T_solution / 2.0)
+    return R1
 
 def create_areas(N, L_size, R1, R2):
     # Функция для создания полезной L1 и дополнительной L\L1 = L2
@@ -155,7 +189,7 @@ def AAM(source, target, DOE, L1, L2, precision):
     alpha1 = 1
     alpha2 = 1
 
-    for i in tqdm(range(sys.maxsize), desc="Итерации алгоритма"):
+    for i in tqdm(range(100), desc="Итерации алгоритма"):
         # Шаг 1: применяем Т2 в плоскости изображения
         w_n = w.copy()
         P2w = P2(target.A, w, L1, L2)
@@ -164,13 +198,12 @@ def AAM(source, target, DOE, L1, L2, precision):
 
         # Шаг 2: обратное преобразование Френеля
         W = ASM(T2w, DOE, source.wavelength, DOE.f, inverse = True)
-
         # Шаг 3: применяем Т1 в плоскости ДОЭ
         w_n = w.copy()
         P1w = P1(source, W, DOE, L2)
         w = T2w + alpha1 * (P1w  - T2w)
         d2 = np.sqrt(np.sum(np.abs(P1w - w_n)**2))
-        # Шаг 4: анализируем ошибку
+        # Шаг 4: анализируем ошибку и корреляцию
         error = d1 + d2
         errors.append(error)
         if error < precision:
@@ -300,7 +333,7 @@ def plot_propagation(L, all_before, all_after_1, all_after_2, save_svg=False, fi
         cbar = fig.colorbar(im, cax=cbar_ax)
         cbar.set_ticks([-np.pi + 0.2, 0, np.pi - 0.2])
         cbar.set_ticklabels(['-π', '0', 'π'])
-        cbar.ax.tick_params(labelsize=6) 
+        cbar.ax.tick_params(labelsize=11) 
     
     row_labels = ['Ампл. \n(r0=0.02)', 'Фаза \n(r0=0.02)',
                   'Ампл. \n(r0=0.01)', 'Фаза \n(r0=0.01)',
@@ -317,23 +350,23 @@ def plot_propagation(L, all_before, all_after_1, all_after_2, save_svg=False, fi
         text_x = grid_start_x + col * frame_width + frame_width/2
         text_y = grid_start_y + n_rows * frame_height + 0.005 
         fig.text(text_x, text_y, mode_names[col], 
-                fontsize=10, va='bottom', ha='center')  
+                fontsize=11, va='bottom', ha='center')  
     
     if save_svg:
         plt.savefig(filename, format='svg', dpi=300, bbox_inches='tight', pad_inches=0)
         print(f"График сохранен как {filename}")
     
     plt.show()
-    
+
 # Общие параметры
 # Число отсчетов
 N = 1024
 # Размер области, приближаемой двумерным массивом
-L = 0.005
+L = 0.02
 # Длина волны пучка
 wavelength = 1550e-9 
 # Радиус перетяжки
-W_0 = 0.001
+W_0 = 0.002
 p_grid = polar_grid(N, L)
 
 # Параметры источника и создание массива, задающего пучок
@@ -353,11 +386,9 @@ phase_plate = DOE(N, L, f, 0)
 
 # Параметры алгоритма и создание областей
 # Допустимая ошибка суммарного расстояния
-precision = 1e-4
-# Радиусы основной и дополнительной областей
-R1 = 0.0015
-R2 = 0.0022
-L1, L2 = create_areas(N, L, R1, R2)
+precision = 1e-6
+# Доля мощности целевой моды в полезной области
+delta_1 = 0.99
 # Параметры турбулентности
 # Расстояние между фазовыми экранами
 d = 100
@@ -383,7 +414,13 @@ all_results_after_1 = []
 # Список для хранения массивов пучков, прошедших через трек с r0 = 2 см
 all_results_after_2 = []
 
+# Радиусы основной и дополнительной областей
+R1 = find_radius(source.n, source.m, source.W_0, delta_1)
+R2 = R1*1.86
+L1, L2 = create_areas(N, L, R1, R2)
+
 print("Гаусс")
+print(f"R1 = {R1}, R2 = {R2}")
 result_after_turbulence_1 = propagation(source.A, phase_plate, turbulence_1, 
                                         wavelength, phase_tensor_1)
 result_after_turbulence_2 = propagation(source.A, phase_plate, turbulence_2, 
@@ -392,7 +429,7 @@ all_results_before.append(source.A)
 all_results_after_1.append(mask(result_after_turbulence_1, L1))
 all_results_after_2.append(mask(result_after_turbulence_2, L1))
 print(correlation(result_after_turbulence_1, source.A, L1))
-correlation(result_after_turbulence_2, source.A, L1)
+print(correlation(result_after_turbulence_2, source.A, L1))
 np.save('turbulence.npy', phase_tensor_1)
 # Создаем массивы для всех мод
 modes = [(0, 0), (1, 0), (2, 0), (3, 0), (4, 0), (5, 0)]
@@ -402,6 +439,10 @@ for i, (m, n) in enumerate(modes):
         # Гауссов пучок уже обработан
         continue
     
+    R1 = find_radius(n, m, W_0, delta_1)
+    R2 = R1*1.86
+    L1, L2 = create_areas(N, L, R1, R2) 
+
     print(f"ГЛ{m:02d}")
     target = LG_beam(N, L, 0, wavelength, W_0, n, m, 0)
     target.A = laguerre_gaussian_beam(p_grid, target) / np.sqrt(np.sum(np.abs(
@@ -409,13 +450,14 @@ for i, (m, n) in enumerate(modes):
     
     phase_plate.T = AAM(source, target, phase_plate, L1, L2, precision)
     result = DOE_propagation(source, phase_plate, L1)
-    correlation(result, target.A, L1)
+    print(f"R1 = {R1}")
+    print(correlation(result, target.A, L1))
     result_after_turbulence_1 = propagation(result, phase_plate, turbulence_1, wavelength, 
                                             phase_tensor_1)
     result_after_turbulence_2 = propagation(result, phase_plate, turbulence_2, wavelength,
                                             phase_tensor_2)
-    correlation(result_after_turbulence_1, target.A, L1)
-    correlation(result_after_turbulence_2, target.A, L1)
+    print(correlation(result_after_turbulence_1, target.A, L1))
+    print(correlation(result_after_turbulence_2, target.A, L1))
     all_results_before.append(result)
     all_results_after_1.append(mask(result_after_turbulence_1, L1))
     all_results_after_2.append(mask(result_after_turbulence_2, L1))
