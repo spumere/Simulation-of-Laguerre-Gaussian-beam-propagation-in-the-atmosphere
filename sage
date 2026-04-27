@@ -1,0 +1,125 @@
+[33mcommit c05ee1cb6caccd6aea494f58920c1cb586e22a50[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m
+Author: spumere <spumere1@yandex.ru>
+Date:   Sun Apr 19 12:34:23 2026 +0400
+
+    .
+
+[33mcommit 733d77c0d226f4a700b1adc13c2298ffa9a54d95[m
+Author: Ivan Goncharov <spumere1@yandex.ru>
+Date:   Sun Feb 22 23:05:15 2026 +0400
+
+    Update main.py
+
+[33mcommit e3ac84b5ba4468fd86140a6a9724654a816d32d4[m
+Author: Ivan Goncharov <spumere1@yandex.ru>
+Date:   Sat Feb 21 17:56:12 2026 +0400
+
+    Update README.md
+
+[33mcommit 8bcbc10d8df7138f5d7342164cf0695e6536058f[m
+Author: Ivan Goncharov <spumere1@yandex.ru>
+Date:   Sat Feb 21 17:53:19 2026 +0400
+
+    Update README.md
+
+[33mcommit 40ed02f92bb6637a0739c5cba77aebf8452d5e2d[m
+Author: Ivan Goncharov <spumere1@yandex.ru>
+Date:   Sat Feb 21 17:52:49 2026 +0400
+
+    Update README.md
+
+[33mcommit b9d9bd1d712fc80a8a9122f385a33ce65b2781b2[m
+Author: Ivan Goncharov <spumere1@yandex.ru>
+Date:   Sat Feb 21 17:51:26 2026 +0400
+
+    Update README.md
+
+[33mcommit 0315e21084c5b6db69220e02f1ee32054b1664b8[m
+Author: Ivan Goncharov <spumere1@yandex.ru>
+Date:   Sat Feb 21 17:51:02 2026 +0400
+
+    Update README.md
+
+[33mcommit 88618c8f2e463ccf64e87c4a118a0039f743ffdb[m
+Author: Ivan Goncharov <spumere1@yandex.ru>
+Date:   Sat Feb 21 17:50:37 2026 +0400
+
+    Update README.md
+
+[33mcommit b9ef0a349f0dd747aa9a9080db8257a9bf8a4a98[m
+Author: Ivan Goncharov <spumere1@yandex.ru>
+Date:   Sat Feb 21 17:50:13 2026 +0400
+
+    Update README.md
+
+[33mcommit 7b7a5c39c980bf6d12944797a1b3a908d6eeb57b[m
+Author: Ivan Goncharov <spumere1@yandex.ru>
+Date:   Sat Feb 21 17:47:13 2026 +0400
+
+    Update README.md
+
+[33mcommit 6d82b9b18c56adb480d571e76cb84215dc312954[m
+Author: Ivan Goncharov <spumere1@yandex.ru>
+Date:   Sat Feb 21 17:46:46 2026 +0400
+
+    Create README.md
+
+[33mcommit a0f6f468a9784185e170a41c0301196b5a564ffd[m
+Author: Ivan Goncharov <spumere1@yandex.ru>
+Date:   Sat Feb 21 17:39:56 2026 +0400
+
+    Update main.py
+
+[33mcommit 75412c8bede0d18aaa5f938d74362b5a484a4a53[m
+Author: spumere <spumere1@yandex.ru>
+Date:   Mon Feb 2 09:50:12 2026 +0400
+
+    Update main.py
+
+[33mcommit 880cd40071170d61e303f116259d3733087d77d5[m
+Author: spumere <spumere1@yandex.ru>
+Date:   Sat Jan 31 13:44:30 2026 +0400
+
+    Update main.py
+
+[33mcommit 110d8e6aca3fc9fe11c9119453da669fafeb301e[m
+Author: spumere <spumere1@yandex.ru>
+Date:   Tue Jan 20 20:44:02 2026 +0400
+
+    Update main.py
+
+[33mcommit 312c890b8f28ca2b768967d3f4abfa496f60276f[m
+Author: spumere <spumere1@yandex.ru>
+Date:   Tue Jan 20 20:33:56 2026 +0400
+
+    Update main.py
+
+[33mcommit 1bff2ce2e086d8243528eba19fcb0fd8622eb972[m
+Author: spumere <spumere1@yandex.ru>
+Date:   Tue Jan 20 17:44:34 2026 +0400
+
+    Update main.py
+
+[33mcommit 576535568e6bd0a7dd290c2acbc533a5cb4bc176[m
+Author: spumere <spumere1@yandex.ru>
+Date:   Mon Jan 19 10:00:28 2026 +0400
+
+    Update main.py
+
+[33mcommit 9436e33eec71a7ce7f93934184e34163f2e51e68[m
+Author: spumere <spumere1@yandex.ru>
+Date:   Tue Jan 13 12:09:57 2026 +0400
+
+    Update main.py
+
+[33mcommit 40d16e6f75299f5428b7d33805cd3add9df87718[m
+Author: spumere <spumere1@yandex.ru>
+Date:   Tue Jan 13 12:08:45 2026 +0400
+
+    Rename main to main.py
+
+[33mcommit fe38c880316c27ae1f3abfdcb937c3ba667326a6[m
+Author: spumere <spumere1@yandex.ru>
+Date:   Tue Jan 13 12:08:18 2026 +0400
+
+    Create main
